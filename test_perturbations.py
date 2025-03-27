@@ -6,7 +6,7 @@ from data_perturber.insertion import (
     out_of_article_error_insertion
 )
 import penman
-
+import random
 # Sample AMR strings
 SAMPLE_AMR = [{
     "id": None,
@@ -31,9 +31,12 @@ SAMPLE_AMR = [{
   }]
 
 def test_perturbations():
+    amr_string = random.choice(SAMPLE_AMR)
+    
+    
     print("Testing predicate error insertion...")
-    perturbed, changelog = predicate_error_insertion(SAMPLE_AMR[0]["summary_amr"])
-    print(f"Original: {SAMPLE_AMR[0]['summary_amr']}")
+    perturbed, changelog = predicate_error_insertion(amr_string["summary_amr"])
+    print(f"Original: {amr_string['summary_amr']}")
     try:
         print(f"Perturbed: {penman.encode(perturbed)}")
     except Exception as e:
@@ -42,8 +45,8 @@ def test_perturbations():
     print(f"Changes: {changelog}\n")
 
     print("Testing circumstance error insertion...")
-    perturbed, changelog = circumstance_error_insertion(SAMPLE_AMR[0]["summary_amr"])
-    print(f"Original: {SAMPLE_AMR[0]['summary_amr']}")
+    perturbed, changelog = circumstance_error_insertion(amr_string["summary_amr"])
+    print(f"Original: {amr_string['summary_amr']}")
     try:
         print(f"Perturbed: {penman.encode(perturbed)}")
     except Exception as e:
@@ -52,8 +55,8 @@ def test_perturbations():
     print(f"Changes: {changelog}\n")
 
     print("Testing entity error insertion...")
-    perturbed = entity_error_insertion(SAMPLE_AMR[0]["summary_amr"])
-    print(f"Original: {SAMPLE_AMR[0]['summary_amr']}")
+    perturbed, changelog = entity_error_insertion(amr_string["summary_amr"])
+    print(f"Original: {amr_string['summary_amr']}")
     try:
         print(f"Perturbed: {penman.encode(perturbed)}")
     except Exception as e:
@@ -62,8 +65,8 @@ def test_perturbations():
     print(f"Changes: {changelog}\n")
 
     print("Testing discourse error insertion...")
-    perturbed, changelog = discourse_error_insertion(SAMPLE_AMR[0]["summary_amr"])
-    print(f"Original: {SAMPLE_AMR[0]['summary_amr']}")
+    perturbed, changelog = discourse_error_insertion(amr_string["summary_amr"])
+    print(f"Original: {amr_string['summary_amr']}")
     try:
         print(f"Perturbed: {penman.encode(perturbed)}")
     except Exception as e:
@@ -72,8 +75,8 @@ def test_perturbations():
     print(f"Changes: {changelog}\n")
 
     print("Testing out-of-article error insertion...")
-    perturbed, changelog = out_of_article_error_insertion(SAMPLE_AMR[0]["summary_amr"])
-    print(f"Original: {SAMPLE_AMR[0]['summary_amr']}")
+    perturbed, changelog = out_of_article_error_insertion(amr_string["summary_amr"])
+    print(f"Original: {amr_string['summary_amr']}")
     try:
         print(f"Perturbed: {penman.encode(perturbed)}")
     except Exception as e:

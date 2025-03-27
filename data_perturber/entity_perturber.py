@@ -1,9 +1,10 @@
-from penman import Graph
-from .utils import penman_to_networkx, networkx_to_penman
+from typing import Tuple, Dict, Any
 import random
+from penman import Graph
 import networkx as nx
+from .utils import penman_to_networkx, networkx_to_penman
 
-def is_person_or_agent(graph, node):
+def is_person_or_agent(graph: nx.DiGraph, node: str) -> bool:
     """
     Check if a node represents a person or an agent-like entity.
     
@@ -42,7 +43,7 @@ def is_person_or_agent(graph, node):
     
     return has_name  # If it has a name but no other indicators, still consider it a potential agent
 
-def EntityError(amr_graph: Graph):
+def EntityError(amr_graph: Graph) -> Tuple[Graph, Dict[str, Any]]:
     """
     Entity Error. Entity errors manifest when the
     entities associated with a predicate in a summary
@@ -59,35 +60,48 @@ def EntityError(amr_graph: Graph):
     
     This implementation checks if both ARG0 and ARG1 are people or agent-like entities
     before performing the swap to ensure semantic plausibility.
+    
+    Args:
+        amr_graph: AMR graph in Penman format
+
+    Returns:
+        A tuple of (perturbed_graph, changelog) where:
+        - perturbed_graph is the modified AMR graph
+        - changelog is a dictionary describing the changes made
     """
+    # Convert Penman graph to NetworkX for easier manipulation
     nx_gr = penman_to_networkx(amr_graph)
     
-    # Find valid ARG0-ARG1 pairs to swap (where both are people/agents)
-    valid_predicates = []
+    # Find predicates that have both :ARG0 and :ARG1 edges
+    potential_preds = []
+    for node in nx_gr.nodes():
+        arg0 = None
+        arg1 = None
+        # Check outgoing edges for :ARG0 and :ARG1
+        for _, neighbor, data in nx_gr.out_edges(node, data=True):
+            if data.get('label') == ':ARG0':
+                arg0 = neighbor
+            elif data.get('label') == ':ARG1':
+                arg1 = neighbor
+        
+        # If the predicate has both :ARG0 and :ARG1, and both are people/agents, add to potential_preds
+        if arg0 and arg1 and is_person_or_agent(nx_gr, arg0) and is_person_or_agent(nx_gr, arg1):
+            potential_preds.append((node, arg0, arg1))
     
-    # Group edges by source (predicate)
-    predicate_args = {}
-    for u, v, data in nx_gr.edges(data=True):
-        if data.get('label') in [':ARG0', ':ARG1']:
-            if u not in predicate_args:
-                predicate_args[u] = {}
-            predicate_args[u][data.get('label')] = v
-    
-    # Check predicates with both ARG0 and ARG1
-    for pred, args in predicate_args.items():
-        if ':ARG0' in args and ':ARG1' in args:
-            arg0 = args[':ARG0']
-            arg1 = args[':ARG1']
-            
-            # Only swap if both are people/agents
-            if is_person_or_agent(nx_gr, arg0) and is_person_or_agent(nx_gr, arg1):
-                valid_predicates.append(pred)
-    
-    # If we have valid predicates to modify, choose one randomly
-    if valid_predicates:
-        chosen_pred = random.choice(valid_predicates)
-        arg0 = predicate_args[chosen_pred][':ARG0']
-        arg1 = predicate_args[chosen_pred][':ARG1']
+    # If there are potential predicates to modify, choose one randomly
+    if potential_preds:
+        chosen_pred, arg0, arg1 = random.choice(potential_preds)
+        
+        # Track changes for changelog
+        changelog = {
+            'type': 'entity_error',
+            'description': 'Swapped agent and patient roles',
+            'predicate': chosen_pred,
+            'swapped_entities': {
+                'ARG0': arg0,
+                'ARG1': arg1
+            }
+        }
         
         # Swap ARG0 and ARG1
         for u, v, data in list(nx_gr.edges(data=True)):
@@ -100,9 +114,15 @@ def EntityError(amr_graph: Graph):
                     nx_gr.add_edge(u, arg0, label=':ARG1')
     else:
         nx_gr = ensure_connected(nx_gr)
-        return networkx_to_penman(nx_gr)
+        changelog = {
+            'type': 'entity_error',
+            'description': 'No suitable entities found for swapping',
+            'action': 'no_change'
+        }
+        
+    return networkx_to_penman(nx_gr), changelog
 
-def change_quant_source(G, old_source, new_source, label=':quant'):
+def change_quant_source(G: nx.DiGraph, old_source: str, new_source: str, label: str = ':quant') -> nx.DiGraph:
     """
     Mengganti sumber (source) dari edge yang memiliki label tertentu.
     Pada kasus ini, mengganti edge dengan label ':quant' yang awalnya dari old_source 
@@ -124,7 +144,7 @@ def change_quant_source(G, old_source, new_source, label=':quant'):
     
     return G
 
-def ensure_connected(G):
+def ensure_connected(G: nx.DiGraph) -> nx.DiGraph:
     """
     Memastikan graf (directed) tetap terhubung secara lemah (weakly connected)
     sehingga saat konversi ke Penman tidak terjadi LayoutError karena graf terputus.
