@@ -34,30 +34,51 @@ def test_perturbations():
     print("Testing predicate error insertion...")
     perturbed, changelog = predicate_error_insertion(SAMPLE_AMR[0]["summary_amr"])
     print(f"Original: {SAMPLE_AMR[0]['summary_amr']}")
-    print(f"Perturbed: {penman.encode(perturbed)}")
+    try:
+        print(f"Perturbed: {penman.encode(perturbed)}")
+    except Exception as e:
+        print(f"Error encoding perturbed graph: {e}")
+        print(f"Graph: {perturbed}")
     print(f"Changes: {changelog}\n")
 
     print("Testing circumstance error insertion...")
     perturbed, changelog = circumstance_error_insertion(SAMPLE_AMR[0]["summary_amr"])
     print(f"Original: {SAMPLE_AMR[0]['summary_amr']}")
-    print(f"Perturbed: {penman.encode(perturbed)}")
+    try:
+        print(f"Perturbed: {penman.encode(perturbed)}")
+    except Exception as e:
+        print(f"Error encoding perturbed graph: {e}")
+        print(f"Graph: {perturbed}")
     print(f"Changes: {changelog}\n")
 
     print("Testing entity error insertion...")
     perturbed = entity_error_insertion(SAMPLE_AMR[0]["summary_amr"])
     print(f"Original: {SAMPLE_AMR[0]['summary_amr']}")
-    print(f"Perturbed: {penman.encode(perturbed)}\n")
+    try:
+        print(f"Perturbed: {penman.encode(perturbed)}")
+    except Exception as e:
+        print(f"Error encoding perturbed graph: {e}")
+        print(f"Graph: {perturbed}")
+    print(f"Changes: {changelog}\n")
 
     print("Testing discourse error insertion...")
     perturbed, changelog = discourse_error_insertion(SAMPLE_AMR[0]["summary_amr"])
     print(f"Original: {SAMPLE_AMR[0]['summary_amr']}")
-    print(f"Perturbed: {penman.encode(perturbed)}")
+    try:
+        print(f"Perturbed: {penman.encode(perturbed)}")
+    except Exception as e:
+        print(f"Error encoding perturbed graph: {e}")
+        print(f"Graph: {perturbed}")
     print(f"Changes: {changelog}\n")
 
     print("Testing out-of-article error insertion...")
     perturbed, changelog = out_of_article_error_insertion(SAMPLE_AMR[0]["summary_amr"])
     print(f"Original: {SAMPLE_AMR[0]['summary_amr']}")
-    print(f"Perturbed: {penman.encode(perturbed)}")
+    try:
+        print(f"Perturbed: {penman.encode(perturbed)}")
+    except Exception as e:
+        print(f"Error encoding perturbed graph: {e}")
+        print(f"Graph: {perturbed}")
     print(f"Changes: {changelog}\n")
 
 if __name__ == "__main__":

@@ -99,14 +99,8 @@ def EntityError(amr_graph: Graph):
                     nx_gr.remove_edge(u, v)
                     nx_gr.add_edge(u, arg0, label=':ARG1')
     else:
-        # Fallback: do the general swap if no valid people/agent pairs found
-        for u, v, data in nx_gr.edges(data=True):
-            if data.get('label') == ':ARG0':
-                data['label'] = ':ARG1'
-            elif data.get('label') == ':ARG1':
-                data['label'] = ':ARG0'
-            
-    return networkx_to_penman(nx_gr)
+        nx_gr = ensure_connected(nx_gr)
+        return networkx_to_penman(nx_gr)
 
 def change_quant_source(G, old_source, new_source, label=':quant'):
     """

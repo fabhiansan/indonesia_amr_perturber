@@ -119,6 +119,8 @@ def get_indonesian_antonyms(word, max_antonyms=5):
             indonesian_antonyms.append(indonesian_antonym)
         except Exception as e:
             print(f"Error translating '{antonym}': {str(e)}")
+            # If translation fails, skip this antonym
+            continue
     print(f"for word {word} \n Found Indonesian antonyms: {indonesian_antonyms}")
     return indonesian_antonyms
 

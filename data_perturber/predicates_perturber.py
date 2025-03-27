@@ -33,50 +33,117 @@ def insertWrongPredicates(amr_graph: Graph, n_wrong=1):
     
     """
     nx_graph = penman_to_networkx(amr_graph)
-    copy_nx_graph = nx_graph.copy()
     changelog = []
-    all_new_graphs = []
-
-    # manipulation
-    for i in copy_nx_graph.nodes:
-        if "-" in i and len(i.split("-")[1]) == 2:
-            preds = i.split("-")[0]
+    
+    # Get all predicate nodes that can be manipulated
+    predicate_nodes = []
+    for node in nx_graph.nodes():
+        # Check if this is a predicate node (has an instance edge with a label ending in "-01", "-02", etc.)
+        for _, instance_value, edge_data in nx_graph.out_edges(node, data=True):
+            if edge_data.get('label') == ':instance' and isinstance(instance_value, str):
+                if "-" in instance_value and len(instance_value.split("-")) > 1:
+                    if instance_value.split("-")[-1].isdigit():
+                        predicate_nodes.append((node, instance_value))
+                        break
+    
+    # If no predicate nodes found, try to add polarity to the root node
+    if not predicate_nodes and len(list(nx_graph.nodes())) > 0:
+        root_candidates = [node for node in nx_graph.nodes() if nx_graph.in_degree(node) == 0]
+        if root_candidates:
+            root_node = root_candidates[0]
+            # Add polarity to root node
+            has_polarity = False
+            for _, target, edge_data in nx_graph.out_edges(root_node, data=True):
+                if edge_data.get('label') == ':polarity':
+                    has_polarity = True
+                    break
             
-            ants = get_indonesian_antonyms(preds)
-            
-            if len(ants) > 0:
-                selected_preds = random.choice(ants)
-                original_pred = selected_preds
-                
-                # Handle "tidak" and "tak" prefixes with proper AMR polarity
-                if selected_preds.startswith('tidak '):
-                    base_word = selected_preds.replace('tidak ', '')
-                    new_graph = nx_graph.copy()
-                    new_graph.add_node('-', label='-')
-                    new_graph.add_edge(i, '-', label=':polarity')
-                    new_graph = nx.relabel_nodes(new_graph, {i: base_word})
-                elif selected_preds.startswith('tak '):
-                    base_word = selected_preds.replace('tak ', '')
-                    new_graph = nx_graph.copy()
-                    new_graph.add_node('-', label='-')
-                    new_graph.add_edge(i, '-', label=':polarity')
-                    new_graph = nx.relabel_nodes(new_graph, {i: base_word})
-                else:
-                    new_graph = nx.relabel_nodes(nx_graph, {i : selected_preds})
-                changelog.append({i : original_pred})
-                all_new_graphs.append(networkx_to_penman(new_graph))
+            if not has_polarity:
+                nx_graph.add_edge(root_node, '-', label=':polarity')
+                changelog.append({f"Added polarity to {root_node}": "negative"})
             else:
-                # todo masih overwrite nx_graph
-                pair = [edge for edge in nx_graph.edges if i in edge]
-                zIndex = pair[0][0]
-                nx_graph.add_node("-")
-                nx_graph.add_edge(zIndex, "-", label=":polarity")
+                # Remove existing polarity
+                polarity_targets = []
+                for _, target, edge_data in nx_graph.out_edges(root_node, data=True):
+                    if edge_data.get('label') == ':polarity':
+                        polarity_targets.append(target)
                 
-                # todo - remove polarity if exist
+                for target in polarity_targets:
+                    nx_graph.remove_edge(root_node, target)
+                changelog.append({f"Removed polarity from {root_node}": "positive"})
+            
+            return networkx_to_penman(nx_graph), changelog
+    
+    # Randomly select up to n_wrong predicates to modify
+    if predicate_nodes:
+        selected_nodes = random.sample(predicate_nodes, min(n_wrong, len(predicate_nodes)))
+        
+        for node, instance_value in selected_nodes:
+            predicate_base = instance_value.split("-")[0]
+            antonyms = get_indonesian_antonyms(predicate_base)
+            
+            if antonyms:
+                # Use antonym substitution
+                selected_antonym = random.choice(antonyms)
                 
+                # Handle "tidak" and "tak" prefixes
+                if selected_antonym.startswith('tidak ') or selected_antonym.startswith('tak '):
+                    base_word = selected_antonym.replace('tidak ', '').replace('tak ', '')
+                    
+                    # Find the original instance value
+                    instance_edges = []
+                    for _, target, edge_data in nx_graph.out_edges(node, data=True):
+                        if edge_data.get('label') == ':instance':
+                            instance_edges.append((node, target, edge_data))
+                    
+                    # Update the instance value
+                    if instance_edges:
+                        nx_graph.remove_edge(node, instance_edges[0][1])
+                        suffix = instance_value.split("-")[-1] if "-" in instance_value else "01"
+                        new_instance = f"{base_word}-{suffix}"
+                        nx_graph.add_edge(node, new_instance, label=':instance')
+                    
+                    # Add polarity if it doesn't exist
+                    has_polarity = False
+                    for _, target, edge_data in nx_graph.out_edges(node, data=True):
+                        if edge_data.get('label') == ':polarity':
+                            has_polarity = True
+                            break
+                    
+                    if not has_polarity:
+                        nx_graph.add_edge(node, '-', label=':polarity')
+                else:
+                    # Simple antonym replacement
+                    instance_edges = []
+                    for _, target, edge_data in nx_graph.out_edges(node, data=True):
+                        if edge_data.get('label') == ':instance':
+                            instance_edges.append((node, target, edge_data))
+                    
+                    if instance_edges:
+                        nx_graph.remove_edge(node, instance_edges[0][1])
+                        suffix = instance_value.split("-")[-1] if "-" in instance_value else "01"
+                        new_instance = f"{selected_antonym}-{suffix}"
+                        nx_graph.add_edge(node, new_instance, label=':instance')
                 
+                changelog.append({instance_value: selected_antonym})
+            else:
+                # Toggle polarity if no antonyms found
+                has_polarity = False
+                polarity_target = None
                 
-    if not all_new_graphs:
-        # If no antonyms found, return original graph with empty changelog
-        return amr_graph, []
-    return all_new_graphs[0], changelog
+                for _, target, edge_data in nx_graph.out_edges(node, data=True):
+                    if edge_data.get('label') == ':polarity':
+                        has_polarity = True
+                        polarity_target = target
+                        break
+                
+                if has_polarity:
+                    # Remove polarity
+                    nx_graph.remove_edge(node, polarity_target)
+                    changelog.append({f"Removed polarity from {instance_value}": "positive"})
+                else:
+                    # Add negative polarity
+                    nx_graph.add_edge(node, '-', label=':polarity')
+                    changelog.append({f"Added polarity to {instance_value}": "negative"})
+    
+    return networkx_to_penman(nx_graph), changelog

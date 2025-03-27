@@ -193,10 +193,12 @@ def substitute_circumstance_entities(nx_graph):
     
     return perturbed_graphs, changelog
 
+import nltk
+from nltk.corpus import wordnet
+
 def get_entity_replacements(entity, n=3):
     """
-    Get replacement entities based on concept type.
-    For simplicity, we use some predefined replacements for common categories.
+    Get replacement entities based on concept type using NLTK WordNet.
     
     Args:
         entity (str): Original entity
@@ -205,30 +207,39 @@ def get_entity_replacements(entity, n=3):
     Returns:
         list: Possible replacement entities
     """
-    # Simple dictionary of entity categories and examples
-    entity_categories = {
-        # Locations
-        "city": ["Jakarta", "Surabaya", "Bandung", "Medan", "Makassar", "Semarang"],
-        "country": ["Indonesia", "Malaysia", "Singapore", "Australia", "Japan", "Korea"],
-        # Times
-        "month": ["January", "February", "March", "April", "May", "June", "July"],
-        "day": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
-        "year": ["2021", "2022", "2023", "2024", "2025"],
-        # Generic replacements
-        "location": ["selatan", "utara", "barat", "timur", "pusat", "pinggir"],
-        "time": ["pagi", "siang", "sore", "malam", "dini hari"],
-    }
     
-    # Try to identify entity category
-    for category, examples in entity_categories.items():
-        if entity.lower() in [ex.lower() for ex in examples]:
-            # Return other examples from same category
-            return [ex for ex in examples if ex.lower() != entity.lower()]
+    # Get synsets for the entity
+    synsets = wordnet.synsets(entity, lang='ind')
     
-    # If no category match, fall back to using antonyms
-    antonyms = get_indonesian_antonyms(entity, max_antonyms=n)
-    if antonyms:
-        return antonyms
+    replacements = []
     
-    # Last resort - generate placeholder replacements
-    return [f"alternate_{entity}_{i}" for i in range(1, n+1)]
+    if synsets:
+        # Get hypernyms (broader terms) of the entity
+        hypernyms = synsets[0].hypernyms()
+        
+        if hypernyms:
+            # Get lemmas (words) associated with the hypernyms
+            for hypernym in hypernyms:
+                for lemma in hypernym.lemmas(lang='ind'):
+                    replacement = lemma.name()
+                    if replacement.lower() != entity.lower() and replacement not in replacements:
+                        replacements.append(replacement)
+    
+    # If no hypernyms found, try to find synonyms
+    if not replacements:
+        for synset in synsets:
+            for lemma in synset.lemmas(lang='ind'):
+                replacement = lemma.name()
+                if replacement.lower() != entity.lower() and replacement not in replacements:
+                    replacements.append(replacement)
+
+    # If still no replacements, fall back to antonyms
+    if not replacements:
+        antonyms = get_indonesian_antonyms(entity, max_antonyms=n)
+        if antonyms:
+            return antonyms
+    
+    # Limit the number of replacements
+    replacements = replacements[:n]
+    
+    return replacements
