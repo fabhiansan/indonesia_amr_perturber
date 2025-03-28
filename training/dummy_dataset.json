@@ -1,0 +1,36 @@
+[
+    {
+        "source_text": "The quick brown fox jumps over the lazy dog.",
+        "amr": "(j / jump-01 :ARG0 (f / fox :mod (b / brown) :mod (q / quick)) :ARG1 (d / dog :mod (l / lazy)))",
+        "perturbed_summary": "A fast brown fox leaps over a sleeping dog.",
+        "score": 1.0,
+        "perturbation_type": null
+    },
+    {
+        "source_text": "The sun rises in the east and sets in the west.",
+        "amr": "(r / rise-01 :ARG0 (s / sun) :direction (e / east)) (s2 / set-01 :ARG0 s :direction (w / west))",
+        "perturbed_summary": "The sun rises in the west and sets in the east.",
+        "score": 0.0,
+        "perturbation_type": "direction_change"
+    },
+    {
+        "source_text": "She enjoys reading science fiction novels in her free time.",
+        "amr": "(e / enjoy-01 :ARG0 (p / person :female) :ARG1 (r / read-01 :ARG1 (n / novel :mod (s / science-fiction))))",
+        "perturbed_summary": "She hates reading science fiction novels in her free time.",
+        "score": 0.0,
+        "perturbation_type": "negation"
+    },
+    {
+        "source_text": "The company reported record profits this quarter.",
+        "amr": "(r / report-01 :ARG0 (c / company) :ARG1 (p / profit :mod (r2 / record))",
+        "score": 1.0,
+        "perturbation_type": null
+    },
+    {
+        "source_text": "Researchers discovered a new species of butterfly in the Amazon rainforest.",
+        "amr": "(d / discover-01 :ARG0 (r / researcher) :ARG1 (s / species :mod (n / new) :mod (b / butterfly) :location (f / forest :name (n2 / name :op1 \"Amazon\")))",
+        "perturbed_summary": "Researchers destroyed a new species of butterfly in the Amazon rainforest.",
+        "score": 0.0,
+        "perturbation_type": "action_change"
+    }
+]
