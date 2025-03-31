@@ -34,6 +34,8 @@ def insertWrongPredicates(amr_graph: Graph, n_wrong: int = 1) -> Tuple[Graph, Li
         - perturbed_graph is the modified AMR graph
         - changelog is a list of dictionaries describing the changes made
     """
+    # Make a copy of the original graph to preserve it
+    original_graph = amr_graph
     nx_graph: nx.DiGraph = penman_to_networkx(amr_graph)
     changelog: List[Dict[str, str]] = []
     
@@ -74,7 +76,16 @@ def insertWrongPredicates(amr_graph: Graph, n_wrong: int = 1) -> Tuple[Graph, Li
                     nx_graph.remove_edge(root_node, target)
                 changelog.append({f"Removed polarity from {root_node}": "positive"})
             
-            return networkx_to_penman(nx_graph), changelog
+            try:
+                result_graph = networkx_to_penman(nx_graph)
+                # Verify the graph is valid and connected
+                if result_graph.top is None or not result_graph.triples:
+                    raise ValueError("possibly disconnected graph")
+                return result_graph, changelog
+            except Exception as e:
+                # If conversion fails, return the original graph
+                print(f"Error creating modified graph: {str(e)}")
+                return original_graph, []
     
     # Randomly select up to n_wrong predicates to modify
     if predicate_nodes:
@@ -148,4 +159,13 @@ def insertWrongPredicates(amr_graph: Graph, n_wrong: int = 1) -> Tuple[Graph, Li
                     nx_graph.add_edge(node, '-', label=':polarity')
                     changelog.append({f"Added polarity to {instance_value}": "negative"})
     
-    return networkx_to_penman(nx_graph), changelog
+    try:
+        result_graph = networkx_to_penman(nx_graph)
+        # Verify the graph is valid and connected
+        if result_graph.top is None or not result_graph.triples:
+            raise ValueError("possibly disconnected graph")
+        return result_graph, changelog
+    except Exception as e:
+        # If conversion fails, return the original graph
+        print(f"Error creating modified graph: {str(e)}")
+        return original_graph, []

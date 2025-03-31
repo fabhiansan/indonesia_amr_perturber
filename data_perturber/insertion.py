@@ -57,7 +57,7 @@ def circumstance_error_insertion(amr_string: str, error_type: str = "both") -> t
     # Generate text from original and perturbed graphs
     return gr2, cl
 
-def entity_error_insertion(amr_string: str) -> penman.Graph:
+def entity_error_insertion(amr_string: str) -> tuple[penman.Graph, dict]:
     """
     Insert entity errors into an AMR graph.
     
@@ -70,7 +70,7 @@ def entity_error_insertion(amr_string: str) -> penman.Graph:
         amr_string (str): AMR graph string
         
     Returns:
-        AMRGraph: The perturbed AMR graph
+        tuple: (perturbed_graph, changelog) where changelog describes changes made
     """
     # Clean AMR string, removing meta data
     amr_string = return_amr(amr_string)
@@ -79,10 +79,10 @@ def entity_error_insertion(amr_string: str) -> penman.Graph:
     gr = penman.decode(amr_string)
     
     # Apply entity error perturbation
-    perturbed_gr = EntityError(gr)
+    perturbed_gr, changelog = EntityError(gr)
     
-    # Generate text from original and perturbed graphs
-    return perturbed_gr
+    # Return the perturbed graph and changelog
+    return perturbed_gr, changelog
 
 def discourse_error_insertion(amr_string: str) -> tuple[penman.Graph, list]:
     """

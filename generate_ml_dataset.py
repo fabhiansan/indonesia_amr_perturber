@@ -463,7 +463,7 @@ def main():
     parser.add_argument("--entity", "-e", type=float, default=0.2, help="Weight for entity errors")
     parser.add_argument("--discourse", "-d", type=float, default=0.2, help="Weight for discourse errors")
     parser.add_argument("--out-of-article", "-o", type=float, default=0.2, help="Weight for out-of-article errors")
-    parser.add_argument("--perturbed-per-original", "-n", type=int, default=1, 
+    parser.add_argument("--perturbed-per-original", "-n", type=int, default=5, 
                         help="Number of perturbed examples to generate per original")
     parser.add_argument("--amr-field", type=str, default="summary_amr", 
                         help="Field in input data containing the AMR string")
