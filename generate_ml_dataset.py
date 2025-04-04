@@ -274,10 +274,11 @@ def generate_dataset(
     amr_field: str = "summary_amr",
     seed: Optional[int] = None,
     max_examples: Optional[int] = None,
-    debug_sample: Optional[int] = None
+    debug_sample: Optional[int] = None,
+    save_interval: int = 10000  # Add parameter for interval
 ) -> None:
     """
-    Generate a labeled dataset for machine learning.
+    Generate a labeled dataset for machine learning with periodic saving.
     
     Args:
         input_file: Path to input JSON file with AMR data
@@ -302,7 +303,8 @@ def generate_dataset(
     
     # Prepare output dataset
     output_data = []
-    
+    last_save_count = 0 # Track the count at the last save
+
     # Initialize statistics
     stats = {
         "parsing": {"success": 0, "failure": 0},
@@ -341,7 +343,16 @@ def generate_dataset(
             "target_summary": item.get("target_summary", "")  # Include target summary
         }
         output_data.append(original_example)
-        
+
+        # Check for intermediate save after adding original
+        if len(output_data) // save_interval > last_save_count // save_interval:
+             logger.info(f"Saving intermediate dataset with {len(output_data)} examples...")
+             # Save without shuffling for intermediate saves
+             with open(output_file, 'w', encoding='utf-8') as f_intermediate:
+                 json.dump(output_data, f_intermediate, indent=2, ensure_ascii=False)
+             logger.info(f"Intermediate dataset saved to {output_file}")
+             last_save_count = len(output_data)
+
         # Debug first few examples in detail if requested
         if debug_sample is not None and i < debug_sample:
             logger.setLevel(logging.DEBUG)
@@ -390,10 +401,19 @@ def generate_dataset(
                 "target_summary": item.get("target_summary", "")  # Include target summary
             }
             output_data.append(perturbed_example)
-            
+
+            # Check for intermediate save after adding perturbed
+            if len(output_data) // save_interval > last_save_count // save_interval:
+                logger.info(f"Saving intermediate dataset with {len(output_data)} examples...")
+                # Save without shuffling for intermediate saves
+                with open(output_file, 'w', encoding='utf-8') as f_intermediate:
+                    json.dump(output_data, f_intermediate, indent=2, ensure_ascii=False)
+                logger.info(f"Intermediate dataset saved to {output_file}")
+                last_save_count = len(output_data)
+
             if debug_sample is not None and i < debug_sample:
                 logger.debug(f"Successfully created perturbation {successful_perturbations}/{perturbed_per_original}")
-        
+
         if successful_perturbations < perturbed_per_original:
             logger.warning(f"Could only generate {successful_perturbations}/{perturbed_per_original} perturbations for example {i}")
     
@@ -472,10 +492,12 @@ def main():
     parser.add_argument("--split", action="store_true", 
                         help="Split the output into train/dev/test sets (80/10/10 split)")
     parser.add_argument("--output-dir", help="Directory to save the split datasets (required if --split is used)")
-    parser.add_argument("--debug-sample", type=int, default=0, 
+    parser.add_argument("--debug-sample", type=int, default=0,
                         help="Number of examples to debug in detail (0 for none)")
+    parser.add_argument("--save-interval", type=int, default=10000,
+                        help="Save intermediate dataset every N examples")
     parser.add_argument("--verbose", "-v", action="store_true", help="Enable verbose output")
-    
+
     args = parser.parse_args()
     
     # Set logging level
@@ -504,7 +526,8 @@ def main():
             amr_field=args.amr_field,
             seed=args.seed,
             max_examples=args.max_examples,
-            debug_sample=args.debug_sample
+            debug_sample=args.debug_sample,
+            save_interval=args.save_interval # Pass the interval
         )
     else:
         # Generate a full dataset first
@@ -518,9 +541,10 @@ def main():
             amr_field=args.amr_field,
             seed=args.seed,
             max_examples=args.max_examples,
-            debug_sample=args.debug_sample
+            debug_sample=args.debug_sample,
+            save_interval=args.save_interval # Pass the interval
         )
-        
+
         # Load the full dataset
         with open(temp_output, 'r', encoding='utf-8') as f:
             full_data = json.load(f)
