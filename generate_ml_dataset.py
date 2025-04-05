@@ -297,13 +297,38 @@ def generate_dataset(
     # Load input data
     with open(input_file, 'r', encoding='utf-8') as f:
         data = json.load(f)
-    
+
     if max_examples is not None:
         data = data[:max_examples]
-    
-    # Prepare output dataset
+
+    # Prepare output dataset and check for existing data to resume
     output_data = []
-    last_save_count = 0 # Track the count at the last save
+    processed_source_ids = set()
+    last_save_count = 0
+
+    if os.path.exists(output_file):
+        logger.info(f"Output file {output_file} exists. Attempting to load and resume.")
+        try:
+            with open(output_file, 'r', encoding='utf-8') as f_existing:
+                output_data = json.load(f_existing)
+            for example in output_data:
+                if "source_id" in example:
+                    processed_source_ids.add(example["source_id"])
+            last_save_count = len(output_data)
+            logger.info(f"Successfully loaded {len(output_data)} existing examples. Found {len(processed_source_ids)} unique processed source IDs.")
+        except json.JSONDecodeError:
+            logger.warning(f"Could not parse existing output file {output_file}. Starting fresh.")
+            output_data = []
+            processed_source_ids = set()
+            last_save_count = 0
+        except Exception as e:
+            logger.error(f"Error loading existing output file {output_file}: {e}. Starting fresh.")
+            output_data = []
+            processed_source_ids = set()
+            last_save_count = 0
+    else:
+        logger.info("No existing output file found. Starting fresh.")
+
 
     # Initialize statistics
     stats = {
@@ -324,20 +349,30 @@ def generate_dataset(
     logger.info(f"Perturbation weights: {perturbation_weights}")
     
     # Process each item
+    processed_count = 0
+    skipped_count = 0
     for i, item in enumerate(tqdm(data, desc="Generating dataset")):
+        source_id = item.get("id", str(i))
+
+        # Check if this source ID has already been processed
+        if source_id in processed_source_ids:
+            skipped_count += 1
+            continue # Skip this item
+
         # Skip if AMR field is missing
         if amr_field not in item or not item[amr_field]:
+            logger.warning(f"Skipping item {source_id} due to missing or empty AMR field '{amr_field}'.")
             continue
-        
+
         amr_string = item[amr_field]
-        
+
         # Add the original AMR example (labeled as correct = 1)
         original_example = {
             "id": f"{i}_original",
             "amr": amr_string,
             "score": 1.0,  # Original AMR is correct
             "perturbation_type": None,
-            "source_id": item.get("id", str(i)),
+            "source_id": source_id, # Use consistent source_id
             "source_text": item.get("source_text", ""),  # Include source text
             "title": item.get("title", ""),              # Include title
             "target_summary": item.get("target_summary", "")  # Include target summary
@@ -394,10 +429,10 @@ def generate_dataset(
                 "amr": perturbed_amr,
                 "score": 0.0,  # Perturbed AMR is incorrect
                 "perturbation_type": changelog.get("perturber", "unknown"),
-                "source_id": item.get("id", str(i)),
+                "source_id": source_id, # Use consistent source_id
                 "changelog": changelog,
                 "source_text": item.get("source_text", ""),  # Include source text
-                "title": item.get("title", ""),              # Include title 
+                "title": item.get("title", ""),              # Include title
                 "target_summary": item.get("target_summary", "")  # Include target summary
             }
             output_data.append(perturbed_example)
@@ -413,12 +448,18 @@ def generate_dataset(
 
             if debug_sample is not None and i < debug_sample:
                 logger.debug(f"Successfully created perturbation {successful_perturbations}/{perturbed_per_original}")
+        processed_count += 1
+        processed_source_ids.add(source_id) # Mark as processed
 
         if successful_perturbations < perturbed_per_original:
-            logger.warning(f"Could only generate {successful_perturbations}/{perturbed_per_original} perturbations for example {i}")
-    
-    # Save the output dataset
+            logger.warning(f"Could only generate {successful_perturbations}/{perturbed_per_original} perturbations for source_id {source_id}")
+
+    logger.info(f"Finished processing. Processed {processed_count} new items, skipped {skipped_count} already existing items.")
+
+    # Save the final output dataset
+    logger.info("Shuffling final dataset...")
     random.shuffle(output_data)  # Shuffle to avoid bias in training
+    logger.info(f"Saving final dataset with {len(output_data)} examples to {output_file}")
     with open(output_file, 'w', encoding='utf-8') as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)
     
