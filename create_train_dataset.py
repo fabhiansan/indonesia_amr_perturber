@@ -10,7 +10,7 @@ from pathlib import Path
 # from huggingface_hub import snapshot_download # Not used directly, but could be added if model download is needed
 
 # --- Configuration ---
-MODEL_PATH = "model/amr2text/taufiq-indo-amr-generation-gold-uncased/checkpoint-1"
+MODEL_PATH = "../model/amr2text/taufiq-indo-amr-generation-gold-uncased/checkpoint-1"
 INPUT_FILE = 'indonesia_amr_perturber/train2.json'
 OUTPUT_FILE = "train_output.json"
 ERROR_LOG_FILE = "error_log.txt"
@@ -97,24 +97,26 @@ class AMRToText:
              raise FileNotFoundError(f"Model directory not found: {model_dir}. Please ensure the path is correct.")
 
         # Initialize tokenizer
+        tokenizer_path = model_dir / 'tokenizer'
         try:
-            # Load directly from the directory containing tokenizer files (config, vocab, etc.)
-            self.tokenizer = T5TokenizerFast.from_pretrained(model_dir)
-            logging.info(f"Tokenizer loaded successfully from {model_dir}")
+            # Load from the 'tokenizer' subdirectory
+            self.tokenizer = T5TokenizerFast.from_pretrained(tokenizer_path)
+            logging.info(f"Tokenizer loaded successfully from {tokenizer_path}")
         except Exception as e:
-            logging.error(f"Failed to load tokenizer from {model_dir}: {e}")
+            logging.error(f"Failed to load tokenizer from {tokenizer_path}: {e}")
             raise
 
         # Initialize model
+        model_weights_path = model_dir / 'model'
         try:
-            # Load model from the same directory
-            model = AutoModelForSeq2SeqLM.from_pretrained(model_dir)
+            # Load model from the 'model' subdirectory
+            model = AutoModelForSeq2SeqLM.from_pretrained(model_weights_path)
             model.to(self.device)
             model.eval()
             self.model = model
-            logging.info(f"Model loaded successfully from {model_dir}")
+            logging.info(f"Model loaded successfully from {model_weights_path}")
         except Exception as e:
-            logging.error(f"Failed to load model from {model_dir}: {e}")
+            logging.error(f"Failed to load model from {model_weights_path}: {e}")
             raise
 
         self.lowercase = False # Option to lowercase input AMR before processing
