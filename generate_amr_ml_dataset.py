@@ -573,23 +573,40 @@ def create_amr_dataset(
         with open(input_file, 'r', encoding='utf-8') as f:
             raw_data = json.load(f)
 
-        # Transform the dictionary-of-dictionaries structure into a list of records
         input_data = []
-        if raw_data:
-            # Assuming all fields have the same keys (indices)
-            # Get the keys (indices) from the first field found
-            first_field_keys = list(raw_data.values())[0].keys()
+        if isinstance(raw_data, list):
+            # If raw_data is a list, assume it's already a list of records
+            logger.info(f"Input file is a list. Assuming it's a list of records.")
+            input_data = raw_data
+            # Add 'id' if not present (optional, but good for consistency)
+            for i, record in enumerate(input_data):
+                if 'id' not in record:
+                    record['id'] = f"item_{i}"
 
-            for index in first_field_keys:
-                record = {}
-                for field_name, field_data in raw_data.items():
-                    if index in field_data:
-                        record[field_name] = field_data[index]
-                    else:
-                        # Handle cases where a field might be missing for an index,
-                        # though based on sample_to_test.json this shouldn't happen.
-                        record[field_name] = None # Or some other default value
-                input_data.append(record)
+        elif isinstance(raw_data, dict):
+            # If raw_data is a dictionary, assume it's the dictionary-of-dictionaries structure
+            logger.info(f"Input file is a dictionary. Assuming dictionary-of-dictionaries format.")
+            if raw_data:
+                # Assuming all fields have the same keys (indices)
+                # Get the keys (indices) from the first field found
+                # Add a check to ensure the first value is a dictionary
+                first_value = next(iter(raw_data.values()), None)
+                if first_value is None or not isinstance(first_value, dict):
+                     raise ValueError("Input dictionary is empty or values are not dictionaries.")
+
+                first_field_keys = list(first_value.keys())
+
+                for index in first_field_keys:
+                    record = {"id": index} # Add id based on the index
+                    for field_name, field_data in raw_data.items():
+                        if index in field_data:
+                            record[field_name] = field_data[index]
+                        else:
+                            record[field_name] = None
+                    input_data.append(record)
+        else:
+            raise TypeError(f"Input file contains unexpected top-level data type: {type(raw_data)}. Expected list or dictionary.")
+
 
         logger.info(f"Loaded and transformed {len(input_data)} items from {input_file}")
     except Exception as e:
