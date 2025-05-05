@@ -4,6 +4,10 @@ import random
 import networkx as nx
 from typing import Tuple, List, Dict, Any, Optional, Union
 from data_perturber.utils import penman_to_networkx, networkx_to_penman, get_indonesian_antonyms
+import nltk
+from nltk.corpus import wordnet as wn
+
+nltk.download('wordnet', quiet=True) # Ensure wordnet data is available
 
 def insertCircumstanceError(amr_graph: Graph, error_type: str = "both") -> Tuple[Graph, List[Dict[str, str]]]:
     """
@@ -32,25 +36,27 @@ def insertCircumstanceError(amr_graph: Graph, error_type: str = "both") -> Tuple
     nx_graph: nx.DiGraph = penman_to_networkx(amr_graph)
     
     if error_type in ["modality", "both"]:
-        modality_graphs, modality_changes = modify_modality(nx_graph.copy())
+        modality_graphs, modality_changes = modify_modality(nx_graph.copy(), amr_graph)
         perturbed_graphs.extend(modality_graphs)
         changelog.extend(modality_changes)
     
     if error_type in ["entity", "both"]:
-        entity_graphs, entity_changes = substitute_circumstance_entities(nx_graph.copy())
+        entity_graphs, entity_changes = substitute_circumstance_entities(nx_graph.copy(), amr_graph)
         perturbed_graphs.extend(entity_graphs)
         changelog.extend(entity_changes)
     
     if not perturbed_graphs:
-        return amr_graph, []
-    return perturbed_graphs[0], changelog
+        # If no perturbations were applied, return the original graph and an informative changelog
+        return amr_graph, [{"error": "No suitable elements found for circumstance perturbation"}]
+    return perturbed_graphs[0], changelog # Return the first perturbed graph and the combined changelog
 
-def modify_modality(nx_graph: nx.DiGraph) -> Tuple[List[Graph], List[Dict[str, str]]]:
+def modify_modality(nx_graph: nx.DiGraph, original_graph: Graph) -> Tuple[List[Graph], List[Dict[str, str]]]:
     """
     Modify modality in AMR graph by replacing modality concepts with stronger/weaker ones.
     
     Args:
         nx_graph: NetworkX graph representation of AMR
+        original_graph: Original AMR graph in Penman format
         
     Returns:
         A tuple of (perturbed_graphs, changelog) where:
@@ -64,7 +70,7 @@ def modify_modality(nx_graph: nx.DiGraph) -> Tuple[List[Graph], List[Dict[str, s
     # Format: {original: intensified}
     modality_mapping: Dict[str, str] = {
         "mungkin": "harus",         # possible → must
-        "dapat": "wajib",           # can → obligatory 
+        "dapat": "wajib",           # can → obligatory
         "bisa": "pasti",            # can → definitely
         "boleh": "wajib",           # may → obligatory
         "izin": "perintah",         # permission → command
@@ -116,8 +122,8 @@ def modify_modality(nx_graph: nx.DiGraph) -> Tuple[List[Graph], List[Dict[str, s
                     # Relabel the node
                     graph_copy = nx.relabel_nodes(graph_copy, {node: new_node})
                     
-                    # Convert back to penman
-                    penman_graph: Graph = networkx_to_penman(graph_copy)
+                    # Convert back to penman, preserving original top node
+                    penman_graph: Graph = networkx_to_penman(graph_copy, top=original_graph.top)
                     
                     perturbed_graphs.append(penman_graph)
                     changelog.append({f"Changed modality": f"'{node}' → '{new_node}'"})
@@ -125,13 +131,14 @@ def modify_modality(nx_graph: nx.DiGraph) -> Tuple[List[Graph], List[Dict[str, s
     
     return perturbed_graphs, changelog
 
-def substitute_circumstance_entities(nx_graph: nx.DiGraph) -> Tuple[List[Graph], List[Dict[str, str]]]:
+def substitute_circumstance_entities(nx_graph: nx.DiGraph, original_graph: Graph) -> Tuple[List[Graph], List[Dict[str, str]]]:
     """
     Substitute circumstance entities in AMR graph by identifying and replacing
     nodes related to time, location, and other circumstantial elements.
     
     Args:
         nx_graph: NetworkX graph representation of AMR
+        original_graph: Original AMR graph in Penman format
         
     Returns:
         A tuple of (perturbed_graphs, changelog) where:
@@ -142,10 +149,16 @@ def substitute_circumstance_entities(nx_graph: nx.DiGraph) -> Tuple[List[Graph],
     changelog: List[Dict[str, str]] = []
     
     # Circumstance relations in AMR grouped by category
-    time_relations: List[str] = [
-        ":time", ":time-of", ":duration", ":decade", ":year", ":month", ":day", 
+    # Use Indonesian temporal relations for output, but keep English for detection
+    indonesian_time_relations: List[str] = [
+        ":waktu", ":waktu-dari", ":durasi", ":dekade", ":tahun", ":bulan", ":hari",
+        ":hari-kerja", ":periode-hari", ":musim", ":zona-waktu"
+    ]
+    english_time_relations: List[str] = [
+        ":time", ":time-of", ":duration", ":decade", ":year", ":month", ":day",
         ":weekday", ":dayperiod", ":season", ":timezone"
     ]
+    time_relations_for_detection = list(set(indonesian_time_relations + english_time_relations)) # Combine and remove duplicates
     
     location_relations: List[str] = [
         ":location", ":source", ":destination", ":path", ":direction"
@@ -159,21 +172,21 @@ def substitute_circumstance_entities(nx_graph: nx.DiGraph) -> Tuple[List[Graph],
         ":manner", ":compared-to", ":extent"
     ]
     
-    # All circumstance relations combined
-    circumstance_relations: List[str] = time_relations + location_relations + causal_relations + manner_relations
+    # All circumstance relations combined for detection
+    circumstance_relations_for_detection: List[str] = time_relations_for_detection + location_relations + causal_relations + manner_relations
     
-    # Map relations to their category for easier substitution
+    # Map relations to their category for easier substitution (using Indonesian for time category)
     relation_categories: Dict[str, List[str]] = {
-        "time": time_relations,
+        "time": indonesian_time_relations, # Use Indonesian for choosing new relations
         "location": location_relations,
         "causal": causal_relations,
         "manner": manner_relations
     }
     
-    # Find all edges with circumstance relations
+    # Find all edges with circumstance relations (using the detection list)
     circumstance_edges: List[Tuple[str, str, Dict[str, str]]] = []
     for u, v, data in nx_graph.edges(data=True):
-        if data.get('label') in circumstance_relations:
+        if data.get('label') in circumstance_relations_for_detection: # Use detection list
             circumstance_edges.append((u, v, data))
     
     if not circumstance_edges:
@@ -204,8 +217,8 @@ def substitute_circumstance_entities(nx_graph: nx.DiGraph) -> Tuple[List[Graph],
                     # Relabel the node
                     graph_copy = nx.relabel_nodes(graph_copy, {target: new_target})
                     
-                    # Convert back to penman
-                    penman_graph: Graph = networkx_to_penman(graph_copy)
+                    # Convert back to penman, preserving original top node
+                    penman_graph: Graph = networkx_to_penman(graph_copy, top=original_graph.top)
                     
                     perturbed_graphs.append(penman_graph)
                     changelog.append({f"Changed {relation[1:]} entity": f"'{target}' → '{new_target}'"})
@@ -231,11 +244,11 @@ def substitute_circumstance_entities(nx_graph: nx.DiGraph) -> Tuple[List[Graph],
                     graph_copy.remove_edge(source, target)
                     graph_copy.add_edge(source, target, label=new_relation)
                     
-                    # Convert back to penman
-                    penman_graph: Graph = networkx_to_penman(graph_copy)
+                    # Convert back to penman, preserving original top node
+                    penman_graph: Graph = networkx_to_penman(graph_copy, top=original_graph.top)
                     
                     perturbed_graphs.append(penman_graph)
-                    changelog.append({'type': 'discourse_error', 'old_relation': relation, 'new_relation': new_relation, 'nodes': (source, target)})
+                    changelog.append({'type': 'circumstance_error', 'subtype': 'change_relation_type', 'old_relation': relation, 'new_relation': new_relation, 'nodes': (source, target)})
             else:
                 # If current relation doesn't fit a category, choose a random category and relation
                 random_category: str = random.choice(list(relation_categories.keys()))
@@ -246,33 +259,47 @@ def substitute_circumstance_entities(nx_graph: nx.DiGraph) -> Tuple[List[Graph],
                 graph_copy.remove_edge(source, target)
                 graph_copy.add_edge(source, target, label=new_relation)
                 
-                # Convert back to penman
-                penman_graph: Graph = networkx_to_penman(graph_copy)
+                # Convert back to penman, preserving original top node
+                penman_graph: Graph = networkx_to_penman(graph_copy, top=original_graph.top)
                 
                 perturbed_graphs.append(penman_graph)
-                changelog.append({'type': 'discourse_error', 'old_relation': relation, 'new_relation': new_relation, 'nodes': (source, target)})
+                changelog.append({'type': 'circumstance_error', 'subtype': 'change_relation_type', 'old_relation': relation, 'new_relation': new_relation, 'nodes': (source, target)})
         
         # STRATEGY 3: Add temporal or locative specificity (for basic relations)
-        if not perturbed_graphs and relation in [":time", ":location"]:
-            # More specific temporal/locative relations
-            specific_time_relations: List[str] = [":decade", ":year", ":month", ":day", ":weekday"]
-            specific_location_relations: List[str] = [":source", ":destination", ":path"]
+        # Check if the relation is a basic time relation (English or Indonesian) or a location relation
+        if not perturbed_graphs and relation in english_time_relations + indonesian_time_relations + [":location"]:
+            # More specific temporal/locative relations (Indonesian for time)
+            specific_indonesian_time_relations: List[str] = [":dekade", ":tahun", ":bulan", ":hari", ":hari-kerja"]
+            specific_location_relations: List[str] = [":source", ":destination", ":path"] # Location relations remain English
             
-            if relation == ":time":
-                new_relation: str = random.choice(specific_time_relations)
-            else:  # relation == ":location"
-                new_relation: str = random.choice(specific_location_relations)
+            if relation in english_time_relations + indonesian_time_relations: # If the original relation was a time relation
+                 # Choose a specific Indonesian time relation
+                 if specific_indonesian_time_relations:
+                     new_relation: str = random.choice(specific_indonesian_time_relations)
+                 else:
+                     # No specific time relations available, skip this strategy
+                     return perturbed_graphs, changelog
+            elif relation == ":location": # If the original relation was :location
+                 # Choose a specific location relation
+                 if specific_location_relations:
+                     new_relation: str = random.choice(specific_location_relations)
+                 else:
+                     # No specific location relations available, skip this strategy
+                     return perturbed_graphs, changelog
+            else:
+                 # Should not happen based on the outer if condition, but as a safeguard
+                 return perturbed_graphs, changelog
             
             # Create a copy and modify the edge
             graph_copy: nx.DiGraph = nx_graph.copy()
             graph_copy.remove_edge(source, target)
             graph_copy.add_edge(source, target, label=new_relation)
             
-            # Convert back to penman
-            penman_graph: Graph = networkx_to_penman(graph_copy)
+            # Convert back to penman, preserving original top node
+            penman_graph: Graph = networkx_to_penman(graph_copy, top=original_graph.top)
             
             perturbed_graphs.append(penman_graph)
-            changelog.append({'type': 'discourse_error', 'old_relation': relation, 'new_relation': new_relation, 'nodes': (source, target)})
+            changelog.append({'type': 'circumstance_error', 'subtype': 'add_specificity', 'old_relation': relation, 'new_relation': new_relation, 'nodes': (source, target)})
     
     return perturbed_graphs, changelog
 
@@ -290,13 +317,12 @@ def get_entity_replacements(entity: str, n: int = 3) -> List[str]:
     """
     from faker import Faker
     import random
-    from nltk.corpus import wordnet as wn
     
     # Create Faker instance with Indonesian locale
     fake = Faker('id_ID')
     
-    # Initialize entity categorization
-    category = get_entity_category(entity)
+    # Initialize entity categorization, passing wn
+    category = get_entity_category(entity, wn)
     
     replacements: List[str] = []
     
@@ -370,12 +396,13 @@ def get_entity_replacements(entity: str, n: int = 3) -> List[str]:
     # Ensure we return at most n items
     return replacements[:n] if len(replacements) > n else replacements
 
-def get_entity_category(entity: str) -> str:
+def get_entity_category(entity: str, wn) -> str:
     """
-    Determine the semantic category of an entity using NLP techniques.
+    Determine the semantic category of an entity using NLP techniques, with access to WordNet.
     
     Args:
         entity: The entity to categorize
+        wn: The WordNet corpus object
         
     Returns:
         Category string: "TIME", "LOCATION", "PERSON", "ORGANIZATION", or "OTHER"
@@ -457,17 +484,9 @@ def get_entity_category(entity: str) -> str:
     
     # Try WordNet-based categorization as fallback
     try:
-        import nltk
-        try:
-            nltk.data.find('corpora/wordnet')
-        except LookupError:
-            nltk.download('wordnet', quiet=True)
-        
-        # Check if entity exists in WordNet
-        synsets = wn.synsets(entity, lang='ind')
-        if not synsets:
-            synsets = wn.synsets(entity)  # Fallback to English
-        
+        # Check if entity exists in WordNet using the passed wn object
+        synsets = wn.synsets(entity, lang='ind') or wn.synsets(entity) # Try Indonesian, fallback to English
+
         if synsets:
             # Get hypernyms to determine category
             for synset in synsets[:2]:  # Limit to first few synsets
@@ -486,6 +505,6 @@ def get_entity_category(entity: str) -> str:
     except:
         # If WordNet lookup fails, continue to fallback
         pass
-    
+
     # Default category
     return "OTHER"

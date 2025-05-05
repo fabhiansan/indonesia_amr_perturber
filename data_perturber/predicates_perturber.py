@@ -34,8 +34,8 @@ def insertWrongPredicates(amr_graph: Graph, n_wrong: int = 1) -> Tuple[Graph, Li
         - perturbed_graph is the modified AMR graph
         - changelog is a list of dictionaries describing the changes made
     """
-    # Make a copy of the original graph to preserve it
-    original_graph = amr_graph
+    # Preserve original graph and get its top node
+    original_top = amr_graph.top
     nx_graph: nx.DiGraph = penman_to_networkx(amr_graph)
     changelog: List[Dict[str, str]] = []
     
@@ -76,8 +76,9 @@ def insertWrongPredicates(amr_graph: Graph, n_wrong: int = 1) -> Tuple[Graph, Li
                     nx_graph.remove_edge(root_node, target)
                 changelog.append({f"Removed polarity from {root_node}": "positive"})
             
+            # Convert back to penman, preserving original top node
             try:
-                result_graph = networkx_to_penman(nx_graph)
+                result_graph = networkx_to_penman(nx_graph, top=original_top) # Pass original_top
                 # Verify the graph is valid and connected
                 if result_graph.top is None or not result_graph.triples:
                     raise ValueError("possibly disconnected graph")
@@ -85,7 +86,7 @@ def insertWrongPredicates(amr_graph: Graph, n_wrong: int = 1) -> Tuple[Graph, Li
             except Exception as e:
                 # If conversion fails, return the original graph
                 print(f"Error creating modified graph: {str(e)}")
-                return original_graph, []
+                return amr_graph, [] # Return original amr_graph, not original_graph copy
     
     # Randomly select up to n_wrong predicates to modify
     if predicate_nodes:
@@ -159,8 +160,9 @@ def insertWrongPredicates(amr_graph: Graph, n_wrong: int = 1) -> Tuple[Graph, Li
                     nx_graph.add_edge(node, '-', label=':polarity')
                     changelog.append({f"Added polarity to {instance_value}": "negative"})
     
+    # Convert back to penman, preserving original top node
     try:
-        result_graph = networkx_to_penman(nx_graph)
+        result_graph = networkx_to_penman(nx_graph, top=original_top) # Pass original_top
         # Verify the graph is valid and connected
         if result_graph.top is None or not result_graph.triples:
             raise ValueError("possibly disconnected graph")
@@ -168,4 +170,4 @@ def insertWrongPredicates(amr_graph: Graph, n_wrong: int = 1) -> Tuple[Graph, Li
     except Exception as e:
         # If conversion fails, return the original graph
         print(f"Error creating modified graph: {str(e)}")
-        return original_graph, []
+        return amr_graph, [] # Return original amr_graph, not original_graph copy

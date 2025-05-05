@@ -24,7 +24,7 @@ try:
     # First try direct imports from individual modules
     from data_perturber.predicates_perturber import insertWrongPredicates
     from data_perturber.circumstance_perturber import insertCircumstanceError
-    from data_perturber.entity_perturber import EntityError
+    from data_perturber.entity_perturber import insertEntityError
     from data_perturber.discourse_perturber import insertDiscourseError
     from data_perturber.out_of_article_perturber import insertOutOfArticleError
 
@@ -34,7 +34,7 @@ try:
         "circumstance": lambda g: insertCircumstanceError(g, "both"),
         # EntityError might be a class or function, adjust lambda if needed
         # Assuming EntityError(g) returns the graph, and changelog needs construction
-        "entity": lambda g: (EntityError(g), {"perturber": "entity", "changes": "entity_error_applied"}), # Example changelog
+        "entity": insertEntityError,
         "discourse": insertDiscourseError,
         "out_of_article": insertOutOfArticleError
     }
@@ -108,13 +108,7 @@ def apply_perturbation(
 
         # Check if the result is the expected tuple
         if not isinstance(result, tuple) or len(result) != 2:
-             # Attempt to handle cases where only the graph might be returned (like old EntityError?)
-             if isinstance(result, penman.Graph):
-                 perturbed_graph = result
-                 changelog = {"perturber": perturbation_type, "changes": f"{perturbation_type}_applied"} # Generic changelog
-                 logger.warning(f"Perturber '{perturbation_type}' returned only a graph. Created generic changelog.")
-             else:
-                 raise TypeError(f"Perturber '{perturbation_type}' did not return the expected (graph, changelog) tuple. Got: {type(result)}")
+            raise TypeError(f"Perturber '{perturbation_type}' did not return the expected (graph, changelog) tuple. Got: {type(result)}")
         else:
             perturbed_graph, changelog = result
 
@@ -129,6 +123,13 @@ def apply_perturbation(
             logger.warning(error_msg)
             # Return None for the graph, but keep the changelog with the error
             return None, {**changelog, "perturber": perturbation_type} # Ensure perturber type is in error dict
+
+        # Check for specific 'no_change' action from entity perturber
+        if perturbation_type == "entity" and changelog.get("action") == "no_change" and changelog.get("description") == "No suitable entities found for swapping":
+            error_msg = f"Entity perturber reported no suitable entities for swapping."
+            logger.warning(error_msg)
+            # Treat this as a failure, return None for the graph
+            return None, {**changelog, "error": error_msg, "perturber": perturbation_type}
 
         # Ensure perturber type is in the successful changelog
         if "perturber" not in changelog:
@@ -331,7 +332,7 @@ def _generate_dataset_internal(
         stats["input_examples_processed"] += 1
 
         if amr_field not in item or not item[amr_field] or not isinstance(item[amr_field], str):
-            logger.warning(f"Skipping item {i} (ID: {item.get('id', 'N/A')}) due to missing or invalid AMR field '{amr_field}'. Value: {item.get(amr_field)}")
+            # logger.warning(f"Skipping item {i} (ID: {item.get('id', 'N/A')}) due to missing or invalid AMR field '{amr_field}'. Value: {item.get(amr_field)}")
             stats["input_examples_skipped"] += 1
             continue
 
@@ -349,7 +350,8 @@ def _generate_dataset_internal(
             # Optionally copy other fields from the input item
             "source_text": item.get("source_text"),
             "title": item.get("title"),
-            "target_summary": item.get("target_summary")
+            "target_summary": item.get("target_summary"),
+            "summary_amr": item.get("summary_amr")
         }
         output_data.append(original_example)
         stats["original_examples_added"] += 1
@@ -410,7 +412,8 @@ def _generate_dataset_internal(
                      # Optionally copy other fields
                     "source_text": item.get("source_text"),
                     "title": item.get("title"),
-                    "target_summary": item.get("target_summary")
+                    "target_summary": item.get("target_summary"),
+                    "summary_amr": item.get("summary_amr")
                 }
                 output_data.append(perturbed_example)
                 logger.debug(f"Successfully created perturbation {successful_perturbations}/{perturbed_per_original} via {perturbation_type}")
@@ -568,8 +571,27 @@ def create_amr_dataset(
     # --- Load Input Data ---
     try:
         with open(input_file, 'r', encoding='utf-8') as f:
-            input_data = json.load(f)
-        logger.info(f"Loaded {len(input_data)} items from {input_file}")
+            raw_data = json.load(f)
+
+        # Transform the dictionary-of-dictionaries structure into a list of records
+        input_data = []
+        if raw_data:
+            # Assuming all fields have the same keys (indices)
+            # Get the keys (indices) from the first field found
+            first_field_keys = list(raw_data.values())[0].keys()
+
+            for index in first_field_keys:
+                record = {}
+                for field_name, field_data in raw_data.items():
+                    if index in field_data:
+                        record[field_name] = field_data[index]
+                    else:
+                        # Handle cases where a field might be missing for an index,
+                        # though based on sample_to_test.json this shouldn't happen.
+                        record[field_name] = None # Or some other default value
+                input_data.append(record)
+
+        logger.info(f"Loaded and transformed {len(input_data)} items from {input_file}")
     except Exception as e:
         logger.exception(f"Failed to load or parse input file: {input_file}")
         raise # Re-raise after logging

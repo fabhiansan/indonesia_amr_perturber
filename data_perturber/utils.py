@@ -59,9 +59,13 @@ def networkx_to_penman(G, top=None):
     # Reconstruct triples from the NetworkX graph.
     triples = []
     for source, target, data in G.edges(data=True):
-        # The relation label is expected to be stored in the 'label' attribute.
         relation = data.get('label', '')
-        triples.append((source, relation, target))
+        # Explicitly handle polarity edge to ensure target is correctly represented
+        if relation == ':polarity':
+            # Ensure the target is the literal '-'
+            triples.append((source, ':polarity', '-'))
+        else:
+            triples.append((source, relation, target))
     
     # If no top node is provided, try to find one (for directed graphs, a node with no incoming edges)
     if top is None:

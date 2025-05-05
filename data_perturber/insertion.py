@@ -2,7 +2,7 @@ import penman
 from data_perturber.utils import return_amr
 from data_perturber.predicates_perturber import insertWrongPredicates
 from data_perturber.circumstance_perturber import insertCircumstanceError
-from data_perturber.entity_perturber import EntityError
+from data_perturber.entity_perturber import insertEntityError as EntityError
 from data_perturber.discourse_perturber import insertDiscourseError
 from data_perturber.out_of_article_perturber import insertOutOfArticleError
 

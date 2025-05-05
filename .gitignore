@@ -23,3 +23,11 @@ result.txt
 .vscode/
 *.swp
 *.swo
+
+# Local development environment
+.env
+.venv/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+memory-bank/
