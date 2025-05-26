@@ -11,8 +11,8 @@ from pathlib import Path
 
 # --- Configuration ---
 MODEL_PATH = "../model/amr2text/taufiq-indo-amr-generation-gold-uncased/checkpoint-1"
-INPUT_FILE = 'indonesia_amr_perturber/train2.json'
-OUTPUT_FILE = "train_output.json"
+INPUT_FILE = 'outputs/train_perturbed.json'
+OUTPUT_FILE = "train_output_2.json"
 ERROR_LOG_FILE = "error_log.txt"
 # PROGRESS_FILE = "progress_tracker.json" # Simple resumability via output file check is used
 

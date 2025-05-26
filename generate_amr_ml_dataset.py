@@ -631,24 +631,66 @@ def create_amr_dataset(
         available_perturbation_funcs=perturbation_functions
     )
 
+    # Resume capability for non-split JSONL
+    if not split and output_file and os.path.exists(output_file):
+        existing_data = []
+        with open(output_file, 'r', encoding='utf-8') as f_resume:
+            for line in f_resume:
+                try:
+                    existing_data.append(json.loads(line))
+                except json.JSONDecodeError:
+                    continue
+        processed_ids = {ex.get("source_id") for ex in existing_data}
+        new_data = [ex for ex in full_dataset if ex.get("source_id") not in processed_ids]
+        logger.info(f"Resuming: {len(existing_data)} existing examples, adding {len(new_data)} new examples.")
+        combined_dataset = existing_data + new_data
+    else:
+        combined_dataset = full_dataset
+
     # --- Shuffle Data ---
     if seed is not None:
         random.seed(seed) # Ensure shuffle is also reproducible
-    random.shuffle(full_dataset)
+    random.shuffle(combined_dataset)
     logger.info("Generated dataset shuffled.")
 
+    # Intermediate saving for JSONL at defined intervals
+    if output_file and save_interval:
+        total = len(combined_dataset)
+        # At least one intermediate save
+        first_save = min(save_interval, total)
+        try:
+            with open(output_file, 'w', encoding='utf-8') as f_tmp:
+                for ex in combined_dataset[:first_save]:
+                    f_tmp.write(json.dumps(ex, ensure_ascii=False) + '\n')
+            logger.info(f"Intermediate dataset saved: {first_save} examples to {output_file}")
+            print(f"Intermediate dataset saved: {first_save} examples to {output_file}")
+        except Exception as e:
+            logger.warning(f"Failed intermediate save at {first_save} examples: {e}")
+        # Subsequent saves if more data
+        if total > save_interval:
+            logger.info(f"Continuing intermediate saves every {save_interval} examples...")
+            print(f"Continuing intermediate saves every {save_interval} examples...")
+            for idx in range(save_interval * 2, total+1, save_interval):
+                try:
+                    with open(output_file, 'w', encoding='utf-8') as f_tmp:
+                        for ex in combined_dataset[:idx]:
+                            f_tmp.write(json.dumps(ex, ensure_ascii=False) + '\n')
+                    logger.info(f"Intermediate dataset saved: {idx} examples to {output_file}")
+                    print(f"Intermediate dataset saved: {idx} examples to {output_file}")
+                except Exception as e:
+                    logger.warning(f"Failed intermediate save at {idx} examples: {e}")
     # --- Handle Splitting and Saving ---
     final_data_structure: Union[List[Dict], Dict[str, List[Dict]]]
-    n = len(full_dataset)
+    n = len(combined_dataset)
 
     if split:
         train_size = int(split_ratios[0] * n)
         dev_size = int(split_ratios[1] * n)
         # test_size = n - train_size - dev_size # Remainder is test
 
-        train_data = full_dataset[:train_size]
-        dev_data = full_dataset[train_size : train_size + dev_size]
-        test_data = full_dataset[train_size + dev_size :]
+        train_data = combined_dataset[:train_size]
+        dev_data = combined_dataset[train_size : train_size + dev_size]
+        test_data = combined_dataset[train_size + dev_size :]
 
         split_data = {"train": train_data, "dev": dev_data, "test": test_data}
         final_data_structure = split_data
@@ -658,27 +700,28 @@ def create_amr_dataset(
             os.makedirs(output_dir, exist_ok=True)
             try:
                 for split_name, data in split_data.items():
-                    filepath = os.path.join(output_dir, f"{split_name}.json")
+                    filepath = os.path.join(output_dir, f"{split_name}.jsonl")
                     with open(filepath, 'w', encoding='utf-8') as f:
-                        json.dump(data, f, indent=2, ensure_ascii=False)
+                        for ex in data:
+                            f.write(json.dumps(ex, ensure_ascii=False) + '\n')
                     logger.info(f"Saved {split_name} split to {filepath}")
             except Exception as e:
                 logger.exception(f"Error saving split datasets to {output_dir}")
                 # Continue to return data even if saving fails
     else:
         # Not splitting, use the full dataset
-        final_data_structure = full_dataset
-        logger.info(f"Generated single dataset with {n} examples.")
+        final_data_structure = combined_dataset
+        logger.info(f"Generated single dataset with {len(combined_dataset)} examples.")
         if output_file:
             try:
-                 # Ensure directory exists for output file
-                 out_dir = os.path.dirname(output_file)
-                 if out_dir and not os.path.exists(out_dir):
-                      os.makedirs(out_dir, exist_ok=True)
-
-                 with open(output_file, 'w', encoding='utf-8') as f:
-                    json.dump(full_dataset, f, indent=2, ensure_ascii=False)
-                 logger.info(f"Saved full dataset to {output_file}")
+                # Ensure directory exists for output file
+                out_dir = os.path.dirname(output_file)
+                if out_dir and not os.path.exists(out_dir):
+                    os.makedirs(out_dir, exist_ok=True)
+                with open(output_file, 'w', encoding='utf-8') as f:
+                    for ex in combined_dataset:
+                        f.write(json.dumps(ex, ensure_ascii=False) + '\n')
+                logger.info(f"Saved full dataset to {output_file}")
             except Exception as e:
                 logger.exception(f"Error saving full dataset to {output_file}")
                 # Continue to return data
