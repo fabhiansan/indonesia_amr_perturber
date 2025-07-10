@@ -2,12 +2,6 @@
 
 A Python library for perturbing AMR graphs with various types of errors.
 
-## Installation
-
-```bash
-pip install data-perturber
-```
-
 ## Usage
 
 ```python
